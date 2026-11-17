@@ -282,29 +282,162 @@
                 </div>
                 `;
             }).join('');
-// ... existing code ... -->
-        function saveAccountsToStorage() {
-            localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-            // Jika berjalan di Google Apps Script langsung, sinkronkan ke sheet AkunToko
-            if (typeof google !== 'undefined' && google.script && google.script.run) {
-                accounts.forEach(acc => {
-                    google.script.run.registerOrUpdateAccount(acc);
-                });
+
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function resetRegForm() {
+            document.getElementById('store-reg-form').reset();
+            document.getElementById('edit-store-id').value = '';
+            document.getElementById('form-title').textContent = 'Daftarkan Akun Toko Baru';
+            document.getElementById('btn-submit-text').textContent = 'Simpan & Daftarkan Toko';
+            document.getElementById('btn-reset-form').classList.add('hidden');
+        }
+
+        function handleStoreFormSubmit(e) {
+            e.preventDefault();
+            const editId = document.getElementById('edit-store-id').value;
+            const name = document.getElementById('reg-store-name').value.trim();
+            const email = document.getElementById('reg-store-email').value.trim();
+            const password = document.getElementById('reg-store-pass').value;
+            const adminName = document.getElementById('reg-store-admin').value.trim() || 'Admin Toko';
+            const phone = document.getElementById('reg-store-phone').value.trim();
+            const address = document.getElementById('reg-store-address').value.trim();
+            const dbLink = document.getElementById('reg-db-link').value.trim();
+            const dbApproved = document.getElementById('reg-db-approved').checked && dbLink !== '';
+
+            if (editId) {
+                const idx = accounts.findIndex(a => a.id === editId);
+                if (idx !== -1) {
+                    accounts[idx] = {
+                        ...accounts[idx],
+                        email,
+                        password,
+                        dbLink,
+                        dbApproved,
+                        profile: {
+                            ...accounts[idx].profile,
+                            name,
+                            phone,
+                            adminName,
+                            address
+                        }
+                    };
+                    showToast('Data toko & link database diperbarui!');
+                }
             } else {
-                // Jika di-host di GitHub, kirim pendaftaran akun & status ACC ke masing-masing URL Web App GAS
-                accounts.forEach(acc => {
-                    if (acc.dbLink && acc.dbLink.startsWith('http')) {
-                        fetch(acc.dbLink, {
-                            method: 'POST',
-                            mode: 'no-cors',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                action: 'registerAccount',
-                                account: acc
-                            })
-                        }).catch(err => console.warn('Sync akun ke GAS:', err));
+                const newAcc = {
+                    id: 'ACC-' + Date.now(),
+                    email,
+                    password,
+                    dbLink,
+                    dbApproved,
+                    profile: {
+                        name,
+                        tagline: 'Spesialis Service HP & Sparepart Bergaransi',
+                        phone,
+                        adminName,
+                        address,
+                        terms: '1. Garansi service 14 hari.\n2. Barang tidak diambil > 30 hari di luar tanggung jawab kami.'
                     }
-                });
+                };
+                accounts.unshift(newAcc);
+                showToast('Akun toko baru berhasil didaftarkan!');
+            }
+
+            saveAccountsToStorage();
+            renderStoresList();
+            resetRegForm();
+        }
+
+        function handleStoreListAction(e) {
+            const btn = e.target.closest('button[data-action]');
+            if (!btn) return;
+            const action = btn.getAttribute('data-action');
+            const id = btn.getAttribute('data-id');
+            const idx = accounts.findIndex(a => a.id === id);
+            if (idx === -1) return;
+
+            if (action === 'toggle-acc') {
+                if (!accounts[idx].dbLink || accounts[idx].dbLink.trim() === '') {
+                    showToast('Isi Link Database terlebih dahulu sebelum ACC!');
+                    return;
+                }
+                accounts[idx].dbApproved = !accounts[idx].dbApproved;
+                saveAccountsToStorage();
+                renderStoresList();
+                showToast(accounts[idx].dbApproved ? 'Database berhasil di-ACC (Connected)!' : 'ACC Database dicabut.');
+            } else if (action === 'edit') {
+                const acc = accounts[idx];
+                document.getElementById('edit-store-id').value = acc.id;
+                document.getElementById('reg-store-name').value = acc.profile?.name || '';
+                document.getElementById('reg-store-email').value = acc.email;
+                document.getElementById('reg-store-pass').value = acc.password;
+                document.getElementById('reg-store-admin').value = acc.profile?.adminName || '';
+                document.getElementById('reg-store-phone').value = acc.profile?.phone || '';
+                document.getElementById('reg-store-address').value = acc.profile?.address || '';
+                document.getElementById('reg-db-link').value = acc.dbLink || '';
+                document.getElementById('reg-db-approved').checked = Boolean(acc.dbApproved);
+
+                document.getElementById('form-title').textContent = 'Edit Akun & Link Database';
+                document.getElementById('btn-submit-text').textContent = 'Simpan Perubahan';
+                document.getElementById('btn-reset-form').classList.remove('hidden');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else if (action === 'delete') {
+                accounts.splice(idx, 1);
+                saveAccountsToStorage();
+                renderStoresList();
+                showToast('Akun toko berhasil dihapus.');
             }
         }
-// ... existing code ... -->
+
+        function enterAdminWorkspace() {
+            document.getElementById('admin-auth-screen').classList.add('hidden');
+            document.getElementById('admin-workspace').classList.remove('hidden');
+            loadAccounts();
+            renderStoresList();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function initAdminApp() {
+            document.getElementById('admin-login-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const user = document.getElementById('admin-user').value.trim();
+                const pass = document.getElementById('admin-pass').value;
+                const errEl = document.getElementById('admin-login-err');
+
+                if (user === 'admin' && pass === 'admin123') {
+                    errEl.classList.add('hidden');
+                    localStorage.setItem(ADMIN_SESSION_KEY, '1');
+                    enterAdminWorkspace();
+                } else {
+                    errEl.textContent = 'Username atau Password Admin salah!';
+                    errEl.classList.remove('hidden');
+                }
+            });
+
+            document.getElementById('btn-admin-logout').addEventListener('click', function() {
+                localStorage.removeItem(ADMIN_SESSION_KEY);
+                document.getElementById('admin-workspace').classList.add('hidden');
+                document.getElementById('admin-auth-screen').classList.remove('hidden');
+            });
+
+            document.getElementById('store-reg-form').addEventListener('submit', handleStoreFormSubmit);
+            document.getElementById('btn-reset-form').addEventListener('click', resetRegForm);
+            document.getElementById('stores-list-container').addEventListener('click', handleStoreListAction);
+
+            if (localStorage.getItem(ADMIN_SESSION_KEY) === '1') {
+                enterAdminWorkspace();
+            } else if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initAdminApp);
+        } else {
+            initAdminApp();
+        }
+    </script>
+</body>
+</html>
