@@ -220,6 +220,20 @@
                     google.script.run.registerOrUpdateAccount(acc);
                 });
             }
+            // Jika di-host di GitHub Pages, kirim data akun & status ACC ke Web App Apps Script (dbLink)
+            accounts.forEach(acc => {
+                if (acc.dbLink && acc.dbLink.trim().startsWith('http')) {
+                    fetch(acc.dbLink.trim(), {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'registerAccount',
+                            account: acc
+                        })
+                    }).catch(err => console.warn('Gagal kirim status ACC ke Apps Script:', err));
+                }
+            });
         }
 
         function showToast(msg) {
